@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "Live English Editor (Translate Mic)",
+  "version": "2.4.0",
+  "description": "Luyện phát âm tiếng Anh bằng Google Translate: popup mic, transcript và chấm điểm với văn bản gốc (tự đóng popup).",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "downloads",
+    "tabs",
+    "system.display"
+  ],
+  "host_permissions": [
+    "https://translate.google.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "exclude_matches": [
+        "https://translate.google.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://translate.google.com/*"
+      ],
+      "js": [
+        "translate_capture.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Live German Editor"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "correct.mp3",
+        "wrong.mp3"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}
