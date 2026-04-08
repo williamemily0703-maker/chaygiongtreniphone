@@ -2,15 +2,18 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { width: 200px; font-family: sans-serif; text-align: center; }
-        button { width: 90%; padding: 10px; margin: 5px 0; cursor: pointer; }
+        body { width: 220px; font-family: -apple-system, sans-serif; text-align: center; padding: 10px; margin: 0; }
+        button { width: 100%; padding: 12px; margin: 6px 0; cursor: pointer; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; }
+        #toggleEditBtn { background-color: #f1f3f4; color: #202124; }
+        #downloadBtn { background-color: #1a73e8; color: white; }
     </style>
 </head>
 <body>
-    <h3>Bảng điều khiển</h3>
-    <button id="toggleEditBtn">Bật/Tắt Chỉnh sửa</button>
-    <button id="downloadBtn">📥 Tải trang đã sửa</button>
+    <h3 style="margin-top: 0;">Live Editor</h3>
+    <button id="toggleEditBtn">Bật/Tắt Sửa Chữ</button>
+    <button id="downloadBtn">📥 Tải Trang Này</button>
     <script src="popup.js"></script>
 </body>
 </html>
