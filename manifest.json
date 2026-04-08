@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Live English Editor (Translate Mic)",
-  "version": "2.4.0",
-  "description": "Luyện phát âm tiếng Anh bằng Google Translate: popup mic, transcript và chấm điểm với văn bản gốc (tự đóng popup).",
+  "name": "Live English Editor (iOS Optimized)",
+  "version": "3.0.0",
+  "description": "Luyện phát âm tiếng Anh, tối ưu cho iPad/iPhone trên Orion Browser.",
   "permissions": [
     "storage",
     "activeTab",
@@ -43,7 +43,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Live German Editor"
+    "default_title": "Live English Editor"
   },
   "web_accessible_resources": [
     {
