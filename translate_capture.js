@@ -1,5 +1,5 @@
 (function() {
-  console.log("[translate_capture] loaded");
+  console.log("[translate_capture] loaded on iOS/Mobile");
 
   let lastSentText = "";
   let debounceTimer = null;
@@ -9,14 +9,21 @@
   }
 
   function findSourceTextarea() {
+    // Thêm các selector dành riêng cho giao diện Mobile/Tablet
     const selectors = [
       'textarea[aria-label*="Source"]',
       'textarea[aria-label*="Nguồn"]',
-      'textarea.er8xn'
+      'textarea.er8xn',
+      'textarea.vks', // Class mobile
+      'textarea'      // Quét tất cả textarea nếu không tìm thấy class cụ thể
     ];
+    
     for (const selector of selectors) {
-      const el = document.querySelector(selector);
-      if (el) return el;
+      const els = document.querySelectorAll(selector);
+      for (const el of els) {
+          // Trả về phần tử có chứa chữ
+          if (el && el.value !== undefined) return el;
+      }
     }
     return null;
   }
@@ -27,7 +34,8 @@
 
     const currentText = normalize(textarea.value);
 
-    if (currentText && currentText !== lastSentText) {
+    // Chỉ gửi khi có nội dung thực sự
+    if (currentText && currentText.length > 0 && currentText !== lastSentText) {
       lastSentText = currentText;
       console.log("Sending transcript:", currentText);
       chrome.runtime.sendMessage({ action: "transcriptFromTranslate", transcript: currentText });
@@ -36,41 +44,14 @@
 
   function handleChanges() {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(readAndSendTranscript, 1500);
+    debounceTimer = setTimeout(readAndSendTranscript, 1000); // Giảm độ trễ xuống 1 giây cho nhạy
   }
 
-  // Sử dụng MutationObserver để theo dõi các thay đổi
   const observer = new MutationObserver(handleChanges);
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
     characterData: true
   });
-
-  // === THÊM MỚI: Tự động cuộn đến nút micro ===
-  function scrollToMicrophone() {
-      // Các selector có thể có cho nút micro trên Google Dịch
-      const selectors = [
-          'button[aria-label*="voice input"]', // Tiếng Anh
-          'button[aria-label*="nhập liệu bằng giọng nói"]', // Tiếng Việt
-          'button[jsname="a3F7od"]' // Một jsname ổn định
-      ];
-
-      let micButton = null;
-      for (const selector of selectors) {
-          micButton = document.querySelector(selector);
-          if (micButton) break;
-      }
-
-      if (micButton) {
-          micButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          console.log("[translate_capture] Scrolled to microphone button.");
-      } else {
-          console.log("[translate_capture] Could not find microphone button.");
-      }
-  }
-
-  // Chờ một chút để giao diện Google Dịch tải xong hoàn toàn rồi mới cuộn
-  setTimeout(scrollToMicrophone, 500);
 
 })();
