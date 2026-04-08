@@ -1,11 +1,14 @@
 let currentVoice = null;
 let widget;
-let feedbackAudio = null;
 let mediaRecorder;
 let audioChunks = [];
 let repeatCounter = 0;
 const maxRepeats = 10;
 let textToSpeakGlobal = "";
+
+// Khởi tạo Audio Objects trước
+let correctAudioObj = null;
+let wrongAudioObj = null;
 
 (function() {
     'use strict';
@@ -15,20 +18,19 @@ let textToSpeakGlobal = "";
     }
     createWidget();
     addEventListeners();
+    
+    // Tải sẵn âm thanh vào bộ nhớ
+    correctAudioObj = new Audio(chrome.runtime.getURL('correct.mp3'));
+    wrongAudioObj = new Audio(chrome.runtime.getURL('wrong.mp3'));
 })();
 
 function loadVoices() {
     const voices = speechSynthesis.getVoices();
-    
-    // ĐÃ THÊM: Ưu tiên số 1 cho giọng Ava Enhanced hoặc Ava Premium của iOS/macOS
     currentVoice = voices.find(v => v.name.includes("Ava") && (v.name.includes("Enhanced") || v.name.includes("Premium"))) ||
                    voices.find(v => v.name === "Ava") ||
                    voices.find(v => v.name.includes("Natural")) || 
                    voices.find(v => v.name === "Samantha") || 
-                   voices.find(v => v.name === "Daniel") || 
                    voices.find(v => v.lang === "en-US");
-                   
-    console.log("Đã chọn giọng đọc:", currentVoice ? currentVoice.name : "Mặc định");
 }
 
 function createWidget() {
@@ -45,7 +47,7 @@ function createWidget() {
         display: 'none',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
         minWidth: '200px',
-        touchAction: 'manipulation' // Giúp tương tác trên màn hình cảm ứng mượt hơn
+        touchAction: 'manipulation'
     });
 
     widget.innerHTML = `
@@ -68,11 +70,6 @@ function addEventListeners() {
 }
 
 function handleSelection(event) {
-    if (feedbackAudio && !feedbackAudio.paused) {
-        feedbackAudio.pause();
-        feedbackAudio.currentTime = 0;
-    }
-
     if (widget.contains(event.target)) return;
 
     if (repeatCounter > 0 && repeatCounter < maxRepeats) {
@@ -101,6 +98,11 @@ function handleHighlightClick(event) {
 
 function handleRecordClick(event) {
     event.stopPropagation();
+    
+    // TRICK CHO iOS: "Mở khóa" âm thanh ngay khi người dùng chạm tay vào màn hình
+    if(correctAudioObj) correctAudioObj.play().then(() => correctAudioObj.pause()).catch(e => console.log("Unlock correct audio failed", e));
+    if(wrongAudioObj) wrongAudioObj.play().then(() => wrongAudioObj.pause()).catch(e => console.log("Unlock wrong audio failed", e));
+
     const text = widget.dataset.originalText || '';
     if (!text) {
         alert("Hãy bôi đen một câu trước đã.");
@@ -113,7 +115,6 @@ function handlePopupCommands(request, sender, sendResponse) {
     if (request.action === "toggleEdit") {
         const isEditable = document.body.contentEditable === 'true';
         document.body.contentEditable = !isEditable;
-        alert(`Chế độ chỉnh sửa trang đã ${!isEditable ? 'BẬT' : 'TẮT'}.`);
     } else if (request.action === "getHTML") {
         const pageHTML = document.documentElement.outerHTML;
         chrome.runtime.sendMessage({action: "downloadHTML", content: pageHTML});
@@ -134,32 +135,20 @@ function triggerSpeakLoop() {
         repeatCounter++;
         const utterance = new SpeechSynthesisUtterance(textToSpeakGlobal);
         utterance.lang = 'en-US';
-        utterance.rate = 0.9; // Giọng đọc hơi chậm lại để tự nhiên hơn
+        utterance.rate = 0.9; 
         if (currentVoice) utterance.voice = currentVoice;
         
-        utterance.onend = () => {
-            setTimeout(triggerSpeakLoop, 500); // Ngắt nghỉ 0.5s giữa các lần đọc
-        };
-        
-        utterance.onerror = (e) => {
-            console.error("Lỗi SpeechSynthesis:", e);
-            repeatCounter = maxRepeats;
-            checkSelectionAndShowWidget();
-        };
-
+        utterance.onend = () => { setTimeout(triggerSpeakLoop, 500); };
+        utterance.onerror = (e) => { repeatCounter = maxRepeats; checkSelectionAndShowWidget(); };
         speechSynthesis.speak(utterance);
     } else {
-        if (repeatCounter === maxRepeats) {
-             checkSelectionAndShowWidget();
-        }
+        if (repeatCounter === maxRepeats) checkSelectionAndShowWidget();
     }
 }
 
 function checkSelectionAndShowWidget() {
     const currentSelection = window.getSelection().toString().trim();
-    if (currentSelection === textToSpeakGlobal) {
-        showWidgetAfterSpeaking();
-    }
+    if (currentSelection === textToSpeakGlobal) showWidgetAfterSpeaking();
 }
 
 function showWidgetAfterSpeaking() {
@@ -173,38 +162,22 @@ function showWidgetAfterSpeaking() {
     
     let left = window.scrollX + rect.left;
     let top = window.scrollY + rect.bottom + 10;
-    
-    if (left + 250 > window.innerWidth) {
-        left = window.innerWidth - 260;
-    }
+    if (left + 250 > window.innerWidth) left = window.innerWidth - 260;
 
-    Object.assign(widget.style, {
-        left: `${left}px`,
-        top: `${top}px`,
-        display: 'block'
-    });
-    
+    Object.assign(widget.style, { left: `${left}px`, top: `${top}px`, display: 'block' });
     widget.querySelector('#extension-score-display').innerHTML = '';
     widget.querySelector('#extension-hint').textContent = '';
 }
 
 async function startRecording(originalText) {
-    if (feedbackAudio && !feedbackAudio.paused) {
-        feedbackAudio.pause();
-        feedbackAudio.currentTime = 0;
-    }
     widget.querySelector('#extension-score-display').innerHTML = '';
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
         audioChunks = [];
         mediaRecorder = new MediaRecorder(stream);
 
-        mediaRecorder.ondataavailable = event => {
-            audioChunks.push(event.data);
-        };
-
+        mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
         mediaRecorder.onstop = () => {
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             const audioUrl = URL.createObjectURL(audioBlob);
@@ -213,7 +186,6 @@ async function startRecording(originalText) {
             audioPlayer.controls = true;
             audioPlayer.style.width = '100%';
             audioPlayer.style.marginTop = '8px';
-            
             widget.querySelector('#extension-score-display').appendChild(audioPlayer);
             stream.getTracks().forEach(track => track.stop());
         };
@@ -223,23 +195,20 @@ async function startRecording(originalText) {
         const recordBtn = widget.querySelector('#extension-record-btn');
         const hint = widget.querySelector('#extension-hint');
         recordBtn.textContent = '⏳';
-        hint.textContent = 'Đang ghi âm... Bấm mic trong popup...';
+        hint.textContent = 'Đang ghi âm... Nhớ bấm nút Mic bên popup Google Dịch nhé!';
         
         const oneTimeHandler = (request, sender, sendResponse) => {
             if (request.action === "transcriptFromTranslate") {
-                if (mediaRecorder && mediaRecorder.state === "recording") {
-                    mediaRecorder.stop();
-                }
+                if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
 
                 const userAnswer = (request.transcript || "").trim();
                 if (userAnswer) {
                     scoreAnswer(userAnswer, originalText);
                 } else {
-                    alert("Không nhận được văn bản từ Google Dịch.");
+                    hint.textContent = 'Lỗi: Chưa nhận được chữ. Bạn đã bấm Mic bên trang Dịch chưa?';
                 }
                 
                 recordBtn.textContent = '🎤';
-                hint.textContent = '';
                 chrome.runtime.onMessage.removeListener(oneTimeHandler);
                 chrome.runtime.sendMessage({ action: "closeTranslatePopup" });
             }
@@ -250,16 +219,12 @@ async function startRecording(originalText) {
         chrome.runtime.sendMessage({ action: "openTranslatePopup" });
 
     } catch (err) {
-        console.error("Lỗi khi truy cập micro:", err);
         alert("Không thể truy cập micro. Vui lòng cấp quyền.");
     }
 }
 
 function scoreAnswer(userAnswer, modelAnswer) {
-    const cleanAndSplit = (str) => {
-        return str.toLowerCase().replace(/[.,?!;:]/g, '').split(/\s+/).filter(Boolean);
-    };
-
+    const cleanAndSplit = (str) => str.toLowerCase().replace(/[.,?!;:]/g, '').split(/\s+/).filter(Boolean);
     const modelWords = cleanAndSplit(modelAnswer);
     const userWords = cleanAndSplit(userAnswer);
 
@@ -269,7 +234,6 @@ function scoreAnswer(userAnswer, modelAnswer) {
     }, {});
 
     let correctWordCount = 0;
-    
     const resultHTML = modelWords.map(word => {
         if (userWordFreq[word] && userWordFreq[word] > 0) {
             correctWordCount++;
@@ -290,13 +254,20 @@ function scoreAnswer(userAnswer, modelAnswer) {
         <i>Bạn nói: ${userAnswer}</i>
     `;
     
+    const hintDiv = widget.querySelector('#extension-hint');
+    hintDiv.textContent = ''; // Xóa chữ đang ghi âm
     widget.querySelector('#extension-score-display').prepend(scoreDiv);
 
-    const soundFile = roundedScore >= 80 ? 'correct.mp3' : 'wrong.mp3';
-    try {
-        feedbackAudio = new Audio(chrome.runtime.getURL(soundFile));
-        feedbackAudio.play().catch(e => console.log("Audio play bị chặn trên iOS do thiếu tương tác người dùng, bỏ qua."));
-    } catch (e) {
-        console.error("Không thể phát âm thanh:", e);
+    // Kích hoạt âm thanh đánh giá (Đã được unlock từ lúc chạm tay)
+    if (roundedScore >= 80) {
+        if(correctAudioObj) {
+            correctAudioObj.currentTime = 0;
+            correctAudioObj.play().catch(e => console.log(e));
+        }
+    } else {
+        if(wrongAudioObj) {
+            wrongAudioObj.currentTime = 0;
+            wrongAudioObj.play().catch(e => console.log(e));
+        }
     }
 }
