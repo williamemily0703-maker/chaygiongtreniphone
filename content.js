@@ -1,12 +1,8 @@
 let currentVoice = null;
 let widget;
-let mediaRecorder;
-let audioChunks = [];
 let repeatCounter = 0;
 const maxRepeats = 10;
 let textToSpeakGlobal = "";
-
-// Khởi tạo Audio Objects trước
 let correctAudioObj = null;
 let wrongAudioObj = null;
 
@@ -19,7 +15,7 @@ let wrongAudioObj = null;
     createWidget();
     addEventListeners();
     
-    // Tải sẵn âm thanh vào bộ nhớ
+    // Tải sẵn Audio để lách luật iOS
     correctAudioObj = new Audio(chrome.runtime.getURL('correct.mp3'));
     wrongAudioObj = new Audio(chrome.runtime.getURL('wrong.mp3'));
 })();
@@ -28,7 +24,6 @@ function loadVoices() {
     const voices = speechSynthesis.getVoices();
     currentVoice = voices.find(v => v.name.includes("Ava") && (v.name.includes("Enhanced") || v.name.includes("Premium"))) ||
                    voices.find(v => v.name === "Ava") ||
-                   voices.find(v => v.name.includes("Natural")) || 
                    voices.find(v => v.name === "Samantha") || 
                    voices.find(v => v.lang === "en-US");
 }
@@ -38,25 +33,25 @@ function createWidget() {
     widget.id = 'german-editor-widget';
     Object.assign(widget.style, {
         position: 'absolute',
-        background: 'white',
-        border: '1px solid #dbdbdb',
-        borderRadius: '12px',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-        padding: '12px',
+        background: '#ffffff',
+        border: '1px solid #e0e0e0',
+        borderRadius: '16px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+        padding: '16px',
         zIndex: '2147483647',
         display: 'none',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-        minWidth: '200px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        minWidth: '220px',
         touchAction: 'manipulation'
     });
 
     widget.innerHTML = `
-        <div style="display:flex; gap: 10px; justify-content: center;">
-            <button id="extension-highlight-btn" title="Highlight" style="font-size: 24px; background:none; border:1px solid #eee; border-radius:8px; padding:10px; cursor:pointer;">🎨</button>
-            <button id="extension-record-btn" title="Ghi âm & Chấm điểm" style="font-size: 24px; background:none; border:1px solid #eee; border-radius:8px; padding:10px; cursor:pointer;">🎤</button>
+        <div style="display:flex; gap: 12px; justify-content: center;">
+            <button id="extension-highlight-btn" style="font-size:24px; background:#f5f5f5; border:none; border-radius:12px; padding:12px 20px; cursor:pointer;">🎨</button>
+            <button id="extension-record-btn" style="font-size:24px; background:#e8f0fe; border:none; border-radius:12px; padding:12px 20px; cursor:pointer; color:#1a73e8;">🎤</button>
         </div>
-        <div id="extension-score-display" style="font-size:14px; margin-top:10px; color:black; text-align:center;"></div>
-        <div id="extension-hint" style="font-size:12px; margin-top:5px; color:#666; text-align:center;"></div>
+        <div id="extension-score-display" style="font-size:15px; margin-top:12px; color:#333; text-align:center; line-height:1.4;"></div>
+        <div id="extension-hint" style="font-size:13px; margin-top:8px; color:#666; text-align:center;"></div>
     `;
     document.body.appendChild(widget);
 }
@@ -86,7 +81,7 @@ function handleSelection(event) {
         if (selectedText.length > 0) {
             startRepeatingSpeak(selectedText);
         }
-    }, 100); 
+    }, 150); 
 }
 
 function handleHighlightClick(event) {
@@ -99,28 +94,14 @@ function handleHighlightClick(event) {
 function handleRecordClick(event) {
     event.stopPropagation();
     
-    // TRICK CHO iOS: "Mở khóa" âm thanh ngay khi người dùng chạm tay vào màn hình
-    if(correctAudioObj) correctAudioObj.play().then(() => correctAudioObj.pause()).catch(e => console.log("Unlock correct audio failed", e));
-    if(wrongAudioObj) wrongAudioObj.play().then(() => wrongAudioObj.pause()).catch(e => console.log("Unlock wrong audio failed", e));
+    // MỞ KHÓA ÂM THANH NGAY KHI CHẠM VÀO NÚT
+    if(correctAudioObj) { correctAudioObj.play().then(() => correctAudioObj.pause()).catch(e=>{}); }
+    if(wrongAudioObj) { wrongAudioObj.play().then(() => wrongAudioObj.pause()).catch(e=>{}); }
 
     const text = widget.dataset.originalText || '';
-    if (!text) {
-        alert("Hãy bôi đen một câu trước đã.");
-        return;
-    }
-    startRecording(text);
-}
-
-function handlePopupCommands(request, sender, sendResponse) {
-    if (request.action === "toggleEdit") {
-        const isEditable = document.body.contentEditable === 'true';
-        document.body.contentEditable = !isEditable;
-    } else if (request.action === "getHTML") {
-        const pageHTML = document.documentElement.outerHTML;
-        chrome.runtime.sendMessage({action: "downloadHTML", content: pageHTML});
-    }
-    sendResponse({status: "completed"});
-    return true;
+    if (!text) return;
+    
+    startRecordingFlow(text);
 }
 
 function startRepeatingSpeak(text) {
@@ -138,8 +119,8 @@ function triggerSpeakLoop() {
         utterance.rate = 0.9; 
         if (currentVoice) utterance.voice = currentVoice;
         
-        utterance.onend = () => { setTimeout(triggerSpeakLoop, 500); };
-        utterance.onerror = (e) => { repeatCounter = maxRepeats; checkSelectionAndShowWidget(); };
+        utterance.onend = () => { setTimeout(triggerSpeakLoop, 600); };
+        utterance.onerror = () => { repeatCounter = maxRepeats; checkSelectionAndShowWidget(); };
         speechSynthesis.speak(utterance);
     } else {
         if (repeatCounter === maxRepeats) checkSelectionAndShowWidget();
@@ -161,66 +142,44 @@ function showWidgetAfterSpeaking() {
     widget.dataset.originalText = textToSpeakGlobal; 
     
     let left = window.scrollX + rect.left;
-    let top = window.scrollY + rect.bottom + 10;
-    if (left + 250 > window.innerWidth) left = window.innerWidth - 260;
+    let top = window.scrollY + rect.bottom + 15;
+    
+    // Thuật toán chống tràn màn hình iPad
+    if (left + 260 > window.innerWidth) left = window.innerWidth - 270;
+    if (left < 10) left = 10;
 
     Object.assign(widget.style, { left: `${left}px`, top: `${top}px`, display: 'block' });
     widget.querySelector('#extension-score-display').innerHTML = '';
     widget.querySelector('#extension-hint').textContent = '';
 }
 
-async function startRecording(originalText) {
+function startRecordingFlow(originalText) {
     widget.querySelector('#extension-score-display').innerHTML = '';
+    const recordBtn = widget.querySelector('#extension-record-btn');
+    const hint = widget.querySelector('#extension-hint');
+    
+    recordBtn.textContent = '⏳';
+    hint.innerHTML = 'Mở Google Dịch...<br><b>Hãy bấm Mic 🎤 trên Tab mới và đọc nhé!</b>';
 
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioChunks = [];
-        mediaRecorder = new MediaRecorder(stream);
-
-        mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
-        mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audioPlayer = document.createElement('audio');
-            audioPlayer.src = audioUrl;
-            audioPlayer.controls = true;
-            audioPlayer.style.width = '100%';
-            audioPlayer.style.marginTop = '8px';
-            widget.querySelector('#extension-score-display').appendChild(audioPlayer);
-            stream.getTracks().forEach(track => track.stop());
-        };
-
-        mediaRecorder.start();
-
-        const recordBtn = widget.querySelector('#extension-record-btn');
-        const hint = widget.querySelector('#extension-hint');
-        recordBtn.textContent = '⏳';
-        hint.textContent = 'Đang ghi âm... Nhớ bấm nút Mic bên popup Google Dịch nhé!';
-        
-        const oneTimeHandler = (request, sender, sendResponse) => {
-            if (request.action === "transcriptFromTranslate") {
-                if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
-
-                const userAnswer = (request.transcript || "").trim();
-                if (userAnswer) {
-                    scoreAnswer(userAnswer, originalText);
-                } else {
-                    hint.textContent = 'Lỗi: Chưa nhận được chữ. Bạn đã bấm Mic bên trang Dịch chưa?';
-                }
-                
-                recordBtn.textContent = '🎤';
-                chrome.runtime.onMessage.removeListener(oneTimeHandler);
-                chrome.runtime.sendMessage({ action: "closeTranslatePopup" });
+    const oneTimeHandler = (request, sender, sendResponse) => {
+        if (request.action === "transcriptFromTranslate") {
+            const userAnswer = (request.transcript || "").trim();
+            if (userAnswer) {
+                scoreAnswer(userAnswer, originalText);
+            } else {
+                hint.textContent = 'Lỗi: Không nhận được giọng nói.';
             }
-            sendResponse({status: "handled"});
-            return true;
-        };
-        chrome.runtime.onMessage.addListener(oneTimeHandler);
-        chrome.runtime.sendMessage({ action: "openTranslatePopup" });
-
-    } catch (err) {
-        alert("Không thể truy cập micro. Vui lòng cấp quyền.");
-    }
+            
+            recordBtn.textContent = '🎤';
+            chrome.runtime.onMessage.removeListener(oneTimeHandler);
+            chrome.runtime.sendMessage({ action: "closeTranslatePopup" });
+        }
+        sendResponse({status: "handled"});
+        return true;
+    };
+    
+    chrome.runtime.onMessage.addListener(oneTimeHandler);
+    chrome.runtime.sendMessage({ action: "openTranslatePopup" });
 }
 
 function scoreAnswer(userAnswer, modelAnswer) {
@@ -238,9 +197,9 @@ function scoreAnswer(userAnswer, modelAnswer) {
         if (userWordFreq[word] && userWordFreq[word] > 0) {
             correctWordCount++;
             userWordFreq[word]--;
-            return `<span style="color:green; font-weight:bold;">${word}</span>`;
+            return `<span style="color:#0f9d58; font-weight:bold;">${word}</span>`;
         } else {
-            return `<span style="color:red; text-decoration: line-through;">${word}</span>`;
+            return `<span style="color:#db4437; text-decoration: line-through;">${word}</span>`;
         }
     }).join(' ');
 
@@ -249,25 +208,31 @@ function scoreAnswer(userAnswer, modelAnswer) {
 
     const scoreDiv = document.createElement('div');
     scoreDiv.innerHTML = `
-        Điểm: <b>${roundedScore}%</b><br>
-        ${resultHTML}<br>
-        <i>Bạn nói: ${userAnswer}</i>
+        <div style="font-size:24px; font-weight:bold; margin-bottom:8px; color:${roundedScore >= 80 ? '#0f9d58' : '#db4437'}">
+            ${roundedScore}%
+        </div>
+        <div>${resultHTML}</div>
+        <div style="margin-top:8px; font-size:13px; color:#555;"><i>Bạn đọc: ${userAnswer}</i></div>
     `;
     
     const hintDiv = widget.querySelector('#extension-hint');
-    hintDiv.textContent = ''; // Xóa chữ đang ghi âm
+    hintDiv.textContent = ''; 
     widget.querySelector('#extension-score-display').prepend(scoreDiv);
 
-    // Kích hoạt âm thanh đánh giá (Đã được unlock từ lúc chạm tay)
+    // Phát âm thanh an toàn
     if (roundedScore >= 80) {
-        if(correctAudioObj) {
-            correctAudioObj.currentTime = 0;
-            correctAudioObj.play().catch(e => console.log(e));
-        }
+        if(correctAudioObj) { correctAudioObj.currentTime = 0; correctAudioObj.play().catch(()=>{}); }
     } else {
-        if(wrongAudioObj) {
-            wrongAudioObj.currentTime = 0;
-            wrongAudioObj.play().catch(e => console.log(e));
-        }
+        if(wrongAudioObj) { wrongAudioObj.currentTime = 0; wrongAudioObj.play().catch(()=>{}); }
     }
+}
+
+function handlePopupCommands(request, sender, sendResponse) {
+    if (request.action === "toggleEdit") {
+        document.body.contentEditable = (document.body.contentEditable === 'true') ? 'false' : 'true';
+    } else if (request.action === "getHTML") {
+        chrome.runtime.sendMessage({action: "downloadHTML", content: document.documentElement.outerHTML});
+    }
+    sendResponse({status: "completed"});
+    return true;
 }
